@@ -44,7 +44,7 @@ def edit_uploaded_image(input_path: str, job_id: str, topic: str, hook: str = ""
     quality = os.environ.get("OPENAI_IMAGE_QUALITY", "medium").strip() or "medium"
 
     prompt = f"""
-Edit the uploaded image for a Turkish orthopedic and traumatology Instagram {target_format}.
+Edit the uploaded image for a orthopedic and traumatology Instagram {target_format}.
 Topic: {topic}
 Hook: {hook}
 
@@ -53,7 +53,7 @@ Goal:
 - Preserve the clinically relevant main subject when it is an X-ray, implant image, clinic image, rehab image, or orthopedic educational image.
 - Remove or obscure patient-identifying details such as names, dates, barcodes, QR codes, protocol numbers, phone numbers and faces when present.
 - Use safe healthcare colors: dark navy, teal, mint, white, clean clinical blue.
-- Leave clear space in the upper third for a readable Turkish title/hook overlay and a clean lower footer area.
+- Leave clear space in the upper third for a readable title/hook overlay and a clean lower footer area.
 - Do not add text, logos, watermarks, fake labels, numbers, signatures, or claims; the app will add text later.
 - Avoid gore, blood, open wounds, fear-based content and unrealistic before/after claims.
 """.strip()

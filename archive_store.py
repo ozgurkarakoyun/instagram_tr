@@ -1,17 +1,32 @@
-"""Basit JSON tabanlı içerik arşivi."""
+"""Basit JSON tabanlı içerik arşivi.
+
+Railway uyumu:
+- DATA_DIR=/data verilirse arşiv /data/archive altında saklanır.
+- DATA_DIR verilmezse lokal geliştirme için archive/ kullanılır.
+- ARCHIVE_DIR secret olarak gerekmez.
+"""
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any
 
-ARCHIVE_DIR = Path("archive")
+
+def _base_data_dir() -> Path:
+    data_dir = os.getenv("DATA_DIR", "").strip()
+    if data_dir:
+        return Path(data_dir)
+    return Path(".")
+
+
+ARCHIVE_DIR = _base_data_dir() / "archive"
 ARCHIVE_FILE = ARCHIVE_DIR / "content_archive.json"
 
 
 def _read() -> list[dict[str, Any]]:
-    ARCHIVE_DIR.mkdir(exist_ok=True)
+    ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
     if not ARCHIVE_FILE.exists():
         return []
     try:
@@ -21,7 +36,7 @@ def _read() -> list[dict[str, Any]]:
 
 
 def _write(items: list[dict[str, Any]]) -> None:
-    ARCHIVE_DIR.mkdir(exist_ok=True)
+    ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
     ARCHIVE_FILE.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
 
 

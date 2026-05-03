@@ -26,11 +26,12 @@ load_dotenv()
 from ai.image_edit import edit_uploaded_image
 from ai.image_generate import generate_topic_image
 from ai.tr_content import (
-    DISCLAIMER,
     generate_carousel_slides,
-    generate_turkish_caption,
-    generate_turkish_hashtags,
-    generate_turkish_hook,
+    generate_caption,
+    generate_hashtags,
+    generate_hook,
+    language_config,
+    normalize_language,
     suggest_current_topics,
 )
 from archive_store import add_archive, get_archive, list_archive
@@ -47,16 +48,22 @@ logger = logging.getLogger("instagram-agent-tr")
 app = FastAPI(
     title="Türkçe AI Instagram Agent",
     description="Ortopedi ve travmatoloji için klinik sosyal medya içerik üretim sistemi",
-    version="4.1.0-tr-clinic",
+    version="4.2.0-tr-clinic-multilang",
 )
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-for d in ("output", "static", "generated", "uploads", "archive"):
-    Path(d).mkdir(exist_ok=True)
+DATA_DIR = Path(os.getenv("DATA_DIR", ".")).resolve()
+OUTPUT_DIR = DATA_DIR / "output"
+GENERATED_DIR = DATA_DIR / "generated"
+UPLOADS_DIR = DATA_DIR / "uploads"
+ARCHIVE_DIR_RUNTIME = DATA_DIR / "archive"
 
-app.mount("/output", StaticFiles(directory="output"), name="output")
-app.mount("/generated", StaticFiles(directory="generated"), name="generated")
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+for d in (OUTPUT_DIR, GENERATED_DIR, UPLOADS_DIR, ARCHIVE_DIR_RUNTIME, Path("static")):
+    d.mkdir(parents=True, exist_ok=True)
+
+app.mount("/output", StaticFiles(directory=str(OUTPUT_DIR)), name="output")
+app.mount("/generated", StaticFiles(directory=str(GENERATED_DIR)), name="generated")
+app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
@@ -83,7 +90,7 @@ async def root():
 async def health():
     return {
         "status": "ok",
-        "version": "4.1.0-tr-clinic",
+        "version": "4.2.0-tr-clinic-multilang",
         "openai_text_model": os.environ.get("OPENAI_TEXT_MODEL", "gpt-4o-mini"),
         "openai_image_model": os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-2"),
         "timestamp": time.time(),
@@ -91,9 +98,10 @@ async def health():
 
 
 @app.get("/suggest-topics")
-async def suggest_topics():
-    topics = suggest_current_topics()
-    return JSONResponse(content={"topics": topics, "count": len(topics), "note": "PubMed/internet erişimi yoksa kürasyon listesi kullanılır."})
+async def suggest_topics(language: str = "tr"):
+    lang = normalize_language(language)
+    topics = suggest_current_topics(lang)
+    return JSONResponse(content={"topics": topics, "count": len(topics), "language": lang, "note": "PubMed/internet erişimi yoksa kürasyon listesi kullanılır."})
 
 
 @app.get("/archive")
@@ -113,7 +121,7 @@ async def _save_upload(upload: UploadFile, rid: str) -> str:
     suffix = Path(upload.filename or "upload.png").suffix.lower() or ".png"
     if suffix not in {".jpg", ".jpeg", ".png", ".webp"}:
         raise HTTPException(status_code=400, detail="Sadece JPG, PNG veya WebP görsel yüklenebilir.")
-    out = Path("uploads") / f"{rid}{suffix}"
+    out = UPLOADS_DIR / f"{rid}{suffix}"
     data = await upload.read()
     if len(data) > 15 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Görsel boyutu 15 MB altında olmalıdır.")
@@ -144,6 +152,7 @@ def _make_sources(
     hook: str,
     image_path: str | None,
     mask_phi: bool,
+    language: str,
     need_post: bool,
     need_story: bool,
 ) -> tuple[str | None, str | None, str | None]:
@@ -187,26 +196,28 @@ async def create_content(
     carousel_count: int = Form(default=5),
     mask_phi: bool = Form(default=True),
     target: str = Form(default="post"),
+    language: str = Form(default="tr"),
     upload: UploadFile | None = File(default=None),
 ):
     rid = getattr(request.state, "request_id", uuid.uuid4().hex[:8])
     mode = (mode or "topic").strip().lower()
     target = _normalize_target(target)
+    language = normalize_language(language)
     topic = (topic or "").strip()
     if mode not in {"topic", "image"}:
         raise HTTPException(status_code=400, detail="mode 'topic' veya 'image' olmalıdır.")
     if not topic:
         raise HTTPException(status_code=400, detail="Konu boş olamaz.")
 
-    logger.info("[%s] create-content mode=%s target=%s topic=%r tone=%s", rid, mode, target, topic, tone)
+    logger.info("[%s] create-content mode=%s target=%s language=%s topic=%r tone=%s", rid, mode, target, language, topic, tone)
     uploaded_path = await _save_upload(upload, rid) if upload else None
 
     need_post, need_story, need_carousel = _required_variants(target)
 
-    hook = generate_turkish_hook(topic)
-    caption = generate_turkish_caption(topic=topic, hook=hook, tone=tone)
-    hashtags = generate_turkish_hashtags(topic)
-    slides = generate_carousel_slides(topic=topic, hook=hook, count=carousel_count) if need_carousel else []
+    hook = generate_hook(topic, language=language)
+    caption = generate_caption(topic=topic, hook=hook, tone=tone, language=language)
+    hashtags = generate_hashtags(topic, language=language)
+    slides = generate_carousel_slides(topic=topic, hook=hook, count=carousel_count, language=language) if need_carousel else []
     full_caption = f"{caption}\n\n{' '.join(hashtags)}".strip()
 
     try:
@@ -217,6 +228,7 @@ async def create_content(
             hook=hook,
             image_path=uploaded_path,
             mask_phi=mask_phi,
+            language=language,
             need_post=need_post,
             need_story=need_story,
         )
@@ -231,15 +243,15 @@ async def create_content(
         carousel_paths: list[str] = []
 
         if need_post and post_source:
-            post_path = f"output/post_{rid}.jpg"
-            build_turkish_asset(post_source, post_path, topic, hook, "post")
+            post_path = str(OUTPUT_DIR / f"post_{rid}.jpg")
+            build_turkish_asset(post_source, post_path, topic, hook, "post", language=language)
         if need_story and story_source:
-            story_path = f"output/story_{rid}.jpg"
-            build_turkish_asset(story_source, story_path, topic, hook, "story")
+            story_path = str(OUTPUT_DIR / f"story_{rid}.jpg")
+            build_turkish_asset(story_source, story_path, topic, hook, "story", language=language)
         if need_carousel and post_source:
             for i, slide in enumerate(slides, start=1):
-                cpath = f"output/carousel_{rid}_{i}.jpg"
-                build_carousel_slide(post_source, cpath, slide, i, len(slides))
+                cpath = str(OUTPUT_DIR / f"carousel_{rid}_{i}.jpg")
+                build_carousel_slide(post_source, cpath, slide, i, len(slides), language=language)
                 carousel_paths.append(cpath)
     except Exception as exc:
         logger.exception("[%s] Media generation failed", rid)
@@ -247,16 +259,18 @@ async def create_content(
 
     outputs = {}
     if post_path:
-        outputs["post"] = f"/{post_path}"
+        outputs["post"] = f"/output/{Path(post_path).name}"
     if story_path:
-        outputs["story"] = f"/{story_path}"
+        outputs["story"] = f"/output/{Path(story_path).name}"
     if carousel_paths:
-        outputs["carousel"] = [f"/{p}" for p in carousel_paths]
+        outputs["carousel"] = [f"/output/{Path(p).name}" for p in carousel_paths]
 
     record = add_archive({
         "job_id": rid,
         "mode": mode,
         "target": target,
+        "language": language,
+        "language_name": language_config(language)["name"],
         "topic": topic,
         "tone": tone,
         "hook": hook,
@@ -266,26 +280,26 @@ async def create_content(
         "slides": slides,
         "outputs": outputs,
         "sources": {
-            "uploaded": f"/{uploaded_path}" if uploaded_path else None,
-            "masked": f"/{masked_path}" if masked_path else None,
-            "post_source": f"/{post_source}" if post_source else None,
-            "story_source": f"/{story_source}" if story_source else None,
+            "uploaded": f"/uploads/{Path(uploaded_path).name}" if uploaded_path else None,
+            "masked": f"/uploads/{Path(masked_path).name}" if masked_path else None,
+            "post_source": f"/{post_source}" if post_source and not Path(post_source).is_absolute() else None,
+            "story_source": f"/{story_source}" if story_source and not Path(story_source).is_absolute() else None,
         },
-        "medical_disclaimer": DISCLAIMER,
+        "medical_disclaimer": language_config(language)["disclaimer"],
     })
 
     return JSONResponse(content={**record, "preview_status": "ready", "publish_ready": False})
 
 
 @app.post("/create-post")
-async def create_post_compat(request: Request, topic: str = Form(...), tone: str = Form(default="professional")):
-    return await create_content(request=request, mode="topic", topic=topic, tone=tone, carousel_count=5, mask_phi=True, target="post", upload=None)
+async def create_post_compat(request: Request, topic: str = Form(...), tone: str = Form(default="professional"), language: str = Form(default="tr")):
+    return await create_content(request=request, mode="topic", topic=topic, tone=tone, carousel_count=5, mask_phi=True, target="post", language=language, upload=None)
 
 
 @app.get("/preview/{filename}")
 async def preview_file(filename: str):
     safe_name = Path(filename).name
-    path = Path("output") / safe_name
+    path = OUTPUT_DIR / safe_name
     if not path.exists():
         raise HTTPException(status_code=404, detail="Dosya bulunamadı.")
     return FileResponse(str(path))

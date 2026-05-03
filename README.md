@@ -70,3 +70,40 @@ upload: optional image file, only for image mode
 ## Hasta bilgisi uyarısı
 
 Maskeleme özelliği kenar/bant alanlarını kapatır ve EXIF bilgisini temizler. OCR tabanlı kesin anonimleştirme değildir. Klinik paylaşım öncesi görselde hasta adı, protokol numarası, tarih, barkod, QR kod, yüz, telefon ve benzeri kişisel verilerin bulunmadığı kullanıcı tarafından kontrol edilmelidir.
+
+
+## Railway Volume / Arşiv Ayarı
+
+Kalıcı arşiv için Railway'de Volume oluşturup mount path olarak `/data` kullanın.
+
+Environment Variables:
+
+```bash
+DATA_DIR=/data
+OPENAI_API_KEY=sk-...
+OPENAI_TEXT_MODEL=gpt-4o-mini
+OPENAI_IMAGE_MODEL=gpt-image-2
+OPENAI_IMAGE_QUALITY=medium
+OPENAI_IMAGE_SIZE=1024x1536
+```
+
+`ARCHIVE_DIR` adında secret/variable tanımlamayın. Arşiv otomatik olarak `DATA_DIR/archive/content_archive.json` dosyasına yazılır.
+
+
+## Dil Seçenekleri
+
+Bu sürümde içerik üretimi için üç dil seçeneği vardır:
+
+- Türkçe
+- English
+- العربية
+
+Dil seçimi şu alanlara uygulanır:
+
+- Görsel üstü başlık ve hook
+- Caption
+- Hashtag
+- Carousel slayt metinleri
+- Alt banttaki uzmanlık/doktor etiketi
+
+Arapça metin için `arabic-reshaper` ve `python-bidi` bağımlılıkları eklenmiştir.

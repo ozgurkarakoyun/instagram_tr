@@ -38,7 +38,7 @@ def _fallback_artwork(path: str, topic: str, variant: str) -> str:
 
 def build_medical_image_prompt(topic: str, hook: str, variant: str) -> str:
     return f"""
-Create a premium Turkish healthcare social media background image for an orthopedic and traumatology educational Instagram {variant}.
+Create a premium healthcare social media background image for an orthopedic and traumatology educational Instagram {variant}.
 Topic: {topic}
 Hook idea: {hook}
 Style: trustworthy, safe, modern medical, orthopedic clinic aesthetic, {SAFE_PALETTE}.
