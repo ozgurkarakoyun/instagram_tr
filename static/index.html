@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Türkçe AI Instagram Agent · Doç. Dr. Özgür Karakoyun</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:#071421; --surface:#0d2235; --surface2:#102c44; --border:#1f4960;
+    --teal:#20c7ba; --mint:#8ce8d5; --white:#f5fdff; --muted:#a8c5cf;
+    --danger:#ff7777; --radius:18px;
+  }
+  body { min-height:100vh; background: radial-gradient(circle at 10% 0%, #12415d 0, #071421 38%, #04101c 100%); color:var(--white); font-family:Inter,system-ui,sans-serif; line-height:1.55; }
+  header { position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:16px; padding:18px 36px; border-bottom:1px solid rgba(140,232,213,.18); background:rgba(7,20,33,.88); backdrop-filter:blur(14px); }
+  .logo { width:44px; height:44px; border-radius:14px; display:grid; place-items:center; background:linear-gradient(135deg,var(--teal),var(--mint)); color:#062033; font-weight:900; }
+  h1 { font-size:18px; font-weight:800; }
+  header .sub { margin-left:auto; color:var(--muted); font-size:13px; }
+  .container { max-width:1280px; margin:0 auto; padding:42px 30px; display:grid; grid-template-columns:430px 1fr; gap:28px; align-items:start; }
+  .panel, .result-section, .empty { border:1px solid rgba(140,232,213,.18); background:rgba(13,34,53,.86); border-radius:var(--radius); box-shadow:0 18px 60px rgba(0,0,0,.24); }
+  .panel { padding:28px; }
+  .title { font-size:25px; line-height:1.15; font-weight:850; margin-bottom:10px; }
+  .title span { color:var(--mint); }
+  .desc { color:var(--muted); font-size:14px; margin-bottom:24px; }
+  label { display:block; font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--mint); font-weight:800; margin-bottom:8px; }
+  input, select, textarea { width:100%; border:1px solid var(--border); background:#061522; color:var(--white); border-radius:13px; padding:14px 15px; font:inherit; outline:none; }
+  textarea { min-height:108px; resize:vertical; }
+  input:focus, textarea:focus, select:focus { border-color:var(--teal); box-shadow:0 0 0 3px rgba(32,199,186,.12); }
+  .field { margin-bottom:18px; }
+  .row { display:flex; gap:10px; }
+  button { border:0; border-radius:13px; font-weight:850; cursor:pointer; transition:.16s ease; }
+  .btn { width:100%; padding:15px 18px; color:#061522; background:linear-gradient(135deg,var(--teal),var(--mint)); display:flex; justify-content:center; align-items:center; gap:10px; font-size:15px; }
+  .btn:hover, .topic-card:hover { transform:translateY(-1px); }
+  .btn:disabled { opacity:.45; cursor:not-allowed; transform:none; }
+  .btn.secondary { background:#092137; color:var(--mint); border:1px solid var(--border); }
+  .spinner { display:none; width:18px; height:18px; border:2px solid rgba(0,0,0,.25); border-top-color:#061522; border-radius:50%; animation:spin .8s linear infinite; }
+  .loading .spinner { display:block; } .loading .text { display:none; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .error { display:none; margin-top:14px; color:#ffd5d5; background:rgba(255,119,119,.10); border:1px solid rgba(255,119,119,.35); padding:12px; border-radius:12px; font-size:13px; }
+  .error.show { display:block; }
+  .topics { margin-top:22px; }
+  .topics-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; }
+  .topics-head h2 { font-size:16px; } .topics-head button { padding:9px 11px; background:#092137; color:var(--mint); border:1px solid var(--border); }
+  .topic-list { display:grid; gap:10px; }
+  .topic-card { text-align:left; background:rgba(6,21,34,.88); border:1px solid var(--border); color:var(--white); padding:13px; border-radius:13px; transition:.16s ease; }
+  .topic-card b { display:block; font-size:14px; margin-bottom:5px; }
+  .topic-card small { display:block; color:var(--muted); font-size:12px; }
+  .topic-card .src { color:var(--mint); margin-top:6px; }
+  .empty { min-height:430px; padding:60px 30px; display:grid; place-items:center; text-align:center; color:var(--muted); }
+  .empty .icon { font-size:50px; margin-bottom:15px; opacity:.55; }
+  .result { display:none; gap:18px; flex-direction:column; } .result.show { display:flex; }
+  .result-section { padding:22px; }
+  .result-label { color:var(--mint); text-transform:uppercase; letter-spacing:.08em; font-size:11px; font-weight:850; margin-bottom:11px; }
+  .hook { font-size:22px; font-weight:850; line-height:1.25; }
+  .preview-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .preview-item { position:relative; }
+  .preview-item img { width:100%; display:block; border-radius:14px; border:1px solid var(--border); background:#061522; }
+  .badge { position:absolute; left:10px; top:10px; background:rgba(4,16,28,.82); color:var(--white); border:1px solid rgba(140,232,213,.28); padding:5px 8px; border-radius:8px; font-size:11px; font-weight:850; }
+  .download { display:block; text-align:center; margin-top:8px; padding:9px; color:var(--mint); text-decoration:none; background:#061522; border:1px solid var(--border); border-radius:10px; font-weight:700; font-size:12px; }
+  .caption { white-space:pre-wrap; max-height:300px; overflow:auto; background:#061522; border:1px solid rgba(140,232,213,.12); border-radius:13px; padding:15px; color:#e8f9fb; font-size:14px; }
+  .copy { margin-top:10px; padding:9px 12px; background:#092137; border:1px solid var(--border); color:var(--mint); }
+  .tags { display:flex; flex-wrap:wrap; gap:7px; }
+  .tag { color:var(--mint); border:1px solid rgba(32,199,186,.45); background:rgba(32,199,186,.08); border-radius:999px; padding:5px 10px; font-size:12px; }
+  .note { margin-top:18px; color:var(--muted); font-size:12px; border-top:1px solid rgba(140,232,213,.15); padding-top:14px; }
+  @media(max-width:980px){ .container{grid-template-columns:1fr; padding:26px 18px;} header{padding:15px 18px;} header .sub{display:none;} .preview-grid{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">OK</div>
+  <div>
+    <h1>Türkçe AI Instagram İçerik Sistemi</h1>
+    <div style="color:var(--muted);font-size:12px;">Gönderi + Story · Ortopedi ve Travmatoloji</div>
+  </div>
+  <div class="sub">Doç. Dr. Özgür Karakoyun</div>
+</header>
+
+<main class="container">
+  <section class="panel">
+    <div class="title">Konu yaz, <span>görseli AI üretsin</span></div>
+    <p class="desc">Resim yükleme yoktur. Sistem konudan Türkçe hook, açıklama, hashtag, gönderi ve story üretir.</p>
+
+    <div class="field">
+      <label>Konu</label>
+      <textarea id="topicInput" placeholder="Örn: Robotik diz protezi gerçekten daha mı iyi?\nÖrn: Skolyoz takibinde yapay zekâ ve fotoğraf analizi"></textarea>
+    </div>
+
+    <div class="field">
+      <label>Ton</label>
+      <select id="toneSelect">
+        <option value="professional">Profesyonel</option>
+        <option value="educational">Eğitici</option>
+        <option value="friendly">Samimi ve anlaşılır</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <button class="btn" id="generateBtn" onclick="generate()"><span class="spinner"></span><span class="text">Gönderi + Story Oluştur</span></button>
+    </div>
+    <div class="error" id="errorBox"></div>
+
+    <div class="topics">
+      <div class="topics-head">
+        <h2>Güncel konu önerileri</h2>
+        <button onclick="loadTopics()" id="topicsBtn">Yenile</button>
+      </div>
+      <div class="topic-list" id="topicList">
+        <button class="topic-card" onclick="useTopic('Robotik diz protezi gerçekten daha mı iyi?')"><b>Robotik diz protezi gerçekten daha mı iyi?</b><small>Hasta diliyle avantaj/sınır dengesi</small></button>
+        <button class="topic-card" onclick="useTopic('Skolyoz takibinde yapay zekâ ve fotoğraf analizi')"><b>Skolyoz takibinde yapay zekâ ve fotoğraf analizi</b><small>Güncel teknoloji, doğru beklenti</small></button>
+      </div>
+    </div>
+
+    <div class="note">Alt bölümde otomatik olarak şu bilgiler yer alır: Doç. Dr. Özgür Karakoyun · www.ozgurkarakoyun.com · Tel: 0545 919 54 13</div>
+  </section>
+
+  <section>
+    <div class="empty" id="emptyState"><div><div class="icon">⚕️</div><p>Bir konu seçin veya yazın. Sistem güvenli sağlık renkleriyle okunabilir başlık ve hook içeren gönderi/story hazırlasın.</p></div></div>
+
+    <div class="result" id="resultPanel">
+      <div class="result-section"><div class="result-label">Hook</div><div class="hook" id="hookText"></div></div>
+      <div class="result-section"><div class="result-label">Önizleme</div><div class="preview-grid" id="previewGrid"></div></div>
+      <div class="result-section"><div class="result-label">Açıklama</div><div class="caption" id="captionBox"></div><button class="copy" onclick="copyCaption()">Açıklamayı kopyala</button></div>
+      <div class="result-section"><div class="result-label">Hashtag</div><div class="tags" id="hashtagWrap"></div></div>
+    </div>
+  </section>
+</main>
+
+<script>
+let lastFullCaption = '';
+function showError(msg){ const box=document.getElementById('errorBox'); box.textContent='⚠ ' + msg; box.classList.add('show'); }
+function clearError(){ document.getElementById('errorBox').classList.remove('show'); }
+function useTopic(topic){ document.getElementById('topicInput').value = topic; window.scrollTo({top:0, behavior:'smooth'}); }
+
+async function loadTopics(){
+  const btn = document.getElementById('topicsBtn');
+  btn.disabled = true; btn.textContent = 'Yükleniyor...';
+  try{
+    const res = await fetch('/suggest-topics');
+    const data = await res.json();
+    const list = document.getElementById('topicList');
+    list.innerHTML = '';
+    (data.topics || []).forEach(t => {
+      const b = document.createElement('button');
+      b.className = 'topic-card';
+      b.onclick = () => useTopic(t.title);
+      b.innerHTML = `<b>${escapeHtml(t.title || '')}</b><small>${escapeHtml(t.angle || '')}</small><small class="src">${escapeHtml(t.source || '')}</small>`;
+      list.appendChild(b);
+    });
+  }catch(e){ showError('Konu önerileri alınamadı: ' + e.message); }
+  finally{ btn.disabled=false; btn.textContent='Yenile'; }
+}
+
+async function generate(){
+  clearError();
+  const topic = document.getElementById('topicInput').value.trim();
+  const tone = document.getElementById('toneSelect').value;
+  if(!topic) return showError('Lütfen bir konu yazın veya önerilerden seçin.');
+  const btn = document.getElementById('generateBtn');
+  btn.disabled = true; btn.classList.add('loading');
+  document.getElementById('emptyState').style.display='none';
+  document.getElementById('resultPanel').classList.remove('show');
+  const fd = new FormData();
+  fd.append('topic', topic); fd.append('tone', tone);
+  try{
+    const res = await fetch('/create-post', {method:'POST', body:fd});
+    const data = await res.json();
+    if(!res.ok){ showError(data.detail || 'Üretim başarısız.'); return; }
+    renderResult(data);
+  }catch(e){ showError('Ağ hatası: ' + e.message); }
+  finally{ btn.disabled=false; btn.classList.remove('loading'); }
+}
+
+function renderResult(data){
+  document.getElementById('hookText').textContent = data.hook || '';
+  document.getElementById('captionBox').textContent = data.generated_caption || '';
+  lastFullCaption = data.full_caption || '';
+  const tags = document.getElementById('hashtagWrap'); tags.innerHTML='';
+  (data.generated_hashtags || []).forEach(tag => { const s=document.createElement('span'); s.className='tag'; s.textContent=tag; tags.appendChild(s); });
+  const grid=document.getElementById('previewGrid'); grid.innerHTML='';
+  [['post','Gönderi'], ['story','Story']].forEach(([key,label]) => {
+    if(!data.outputs || !data.outputs[key]) return;
+    const url = data.outputs[key];
+    const div = document.createElement('div'); div.className='preview-item';
+    div.innerHTML = `<div class="badge">${label}</div><img src="${url}" alt="${label}"><a class="download" href="${url}" download>⬇ ${label} indir</a>`;
+    grid.appendChild(div);
+  });
+  document.getElementById('resultPanel').classList.add('show');
+  document.getElementById('resultPanel').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function copyCaption(){ navigator.clipboard.writeText(lastFullCaption); }
+function escapeHtml(s){ return String(s).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+loadTopics();
+</script>
+</body>
+</html>
