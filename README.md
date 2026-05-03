@@ -1,64 +1,35 @@
-# Türkçe AI Instagram Agent
+# Türkçe AI Instagram Klinik İçerik Sistemi
 
-Doç. Dr. Özgür Karakoyun için Türkçe ortopedi ve travmatoloji Instagram içerik sistemi.
+Doç. Dr. Özgür Karakoyun için ortopedi ve travmatoloji odaklı Instagram içerik üretim paneli.
 
-## Bu sürümdeki akış
+## Özellikler
 
-1. Kullanıcı resim yüklemez.
-2. Kullanıcı bir konu yazar veya güncel konu önerilerinden seçer.
-3. Sistem Türkçe hook, açıklama ve hashtag üretir.
-4. GPT Image modeli konuya göre medikal arka plan görseli üretir.
-5. Sistem okunabilir başlık, hook ve alt iletişim bölümünü görselin üzerine kendisi basar.
-6. Sadece iki çıktı oluşturulur:
-   - Gönderi: `1080x1350`
-   - Story: `1080x1920`
+1. Konudan gönderi + story üretimi
+2. Yüklenen görseli GPT Image ile gönderi/story tasarımına dönüştürme
+3. Başlık ve hook metinlerini okunabilir şekilde görsel üzerine bindirme
+4. Güncel ortopedi/travmatoloji konu önerileri sayfası
+5. Caption + hashtag üretimi
+6. 3-7 slaytlık carousel üretimi
+7. Yüklenen görsellerde basit hasta bilgisi maskeleme
+8. JSON tabanlı içerik arşivi
 
-## Alt bilgi
+## Çıktılar
 
-Her gönderi ve story altında otomatik olarak şu bilgiler yer alır:
+- Gönderi: `1080x1350`
+- Story: `1080x1920`
+- Carousel: `1080x1350`, 3-7 slayt
 
-- Doç. Dr. Özgür Karakoyun
-- www.ozgurkarakoyun.com
-- Tel: 0545 919 54 13
-
-## Railway environment variables
+## Railway Environment Variables
 
 ```bash
 OPENAI_API_KEY=sk-...
+OPENAI_TEXT_MODEL=gpt-4o-mini
 OPENAI_IMAGE_MODEL=gpt-image-2
 OPENAI_IMAGE_QUALITY=medium
 OPENAI_IMAGE_SIZE=1024x1536
-OPENAI_TEXT_MODEL=gpt-4o-mini
 ```
 
-Not: `gpt-image-2` kullanımı için OpenAI platformunda Organization Verification gerekebilir. Doğrulama yoksa uygulama hata vermeden basit fallback görsel üretir.
-
-## Endpointler
-
-### `GET /`
-Web arayüzünü açar.
-
-### `GET /suggest-topics`
-İnternet/PubMed üzerinden güncel ortopedi-travmatoloji başlıklarını almaya çalışır. Erişim başarısız olursa yerel kürasyon listesini döndürür.
-
-### `POST /create-post`
-Form alanları:
-
-```text
-topic: Türkçe konu
-tone: professional | educational | friendly
-```
-
-Dönen çıktı:
-
-```json
-{
-  "outputs": {
-    "post": "/output/post_xxxxxxxx.jpg",
-    "story": "/output/story_xxxxxxxx.jpg"
-  }
-}
-```
+`gpt-image-2` için OpenAI Organization Verification gerekebilir. Doğrulama yoksa sistem fallback görselle çalışır; fakat gerçek GPT Image üretim/düzenleme aktif olmaz.
 
 ## Lokal çalıştırma
 
@@ -67,8 +38,35 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Tarayıcıda:
+Arayüz:
 
 ```text
 http://localhost:8000
 ```
+
+## API Endpointleri
+
+```text
+GET  /
+GET  /health
+GET  /suggest-topics
+GET  /archive
+GET  /archive/{job_id}
+POST /create-content
+POST /create-post   # eski endpoint uyumluluğu
+```
+
+`/create-content` form alanları:
+
+```text
+mode: topic | image
+topic: string
+tone: professional | educational | friendly
+carousel_count: 3-7
+mask_phi: true | false
+upload: optional image file, only for image mode
+```
+
+## Hasta bilgisi uyarısı
+
+Maskeleme özelliği kenar/bant alanlarını kapatır ve EXIF bilgisini temizler. OCR tabanlı kesin anonimleştirme değildir. Klinik paylaşım öncesi görselde hasta adı, protokol numarası, tarih, barkod, QR kod, yüz, telefon ve benzeri kişisel verilerin bulunmadığı kullanıcı tarafından kontrol edilmelidir.
