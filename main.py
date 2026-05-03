@@ -37,6 +37,7 @@ from ai.tr_content import (
 from archive_store import add_archive, get_archive, list_archive
 from media.privacy import mask_patient_info
 from media.template_tr import build_carousel_slide, build_turkish_asset
+from media.video_story import build_story_video, is_video_file
 
 logging.basicConfig(
     level=logging.INFO,
@@ -48,7 +49,7 @@ logger = logging.getLogger("instagram-agent-tr")
 app = FastAPI(
     title="Türkçe AI Instagram Agent",
     description="Ortopedi ve travmatoloji için klinik sosyal medya içerik üretim sistemi",
-    version="4.2.0-tr-clinic-multilang",
+    version="4.3.0-tr-clinic-video-story",
 )
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
@@ -90,7 +91,7 @@ async def root():
 async def health():
     return {
         "status": "ok",
-        "version": "4.2.0-tr-clinic-multilang",
+        "version": "4.3.0-tr-clinic-video-story",
         "openai_text_model": os.environ.get("OPENAI_TEXT_MODEL", "gpt-4o-mini"),
         "openai_image_model": os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-2"),
         "timestamp": time.time(),
@@ -119,12 +120,13 @@ async def archive_detail(job_id: str):
 
 async def _save_upload(upload: UploadFile, rid: str) -> str:
     suffix = Path(upload.filename or "upload.png").suffix.lower() or ".png"
-    if suffix not in {".jpg", ".jpeg", ".png", ".webp"}:
-        raise HTTPException(status_code=400, detail="Sadece JPG, PNG veya WebP görsel yüklenebilir.")
+    if suffix not in {".jpg", ".jpeg", ".png", ".webp", ".mp4", ".mov", ".m4v", ".webm", ".avi", ".mkv"}:
+        raise HTTPException(status_code=400, detail="Sadece JPG, PNG, WebP veya video dosyası yüklenebilir.")
     out = UPLOADS_DIR / f"{rid}{suffix}"
     data = await upload.read()
-    if len(data) > 15 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Görsel boyutu 15 MB altında olmalıdır.")
+    max_bytes = 150 * 1024 * 1024 if suffix in {".mp4", ".mov", ".m4v", ".webm", ".avi", ".mkv"} else 15 * 1024 * 1024
+    if len(data) > max_bytes:
+        raise HTTPException(status_code=400, detail="Görsel 15 MB, video 150 MB altında olmalıdır.")
     out.write_bytes(data)
     return str(out)
 
@@ -211,6 +213,11 @@ async def create_content(
 
     logger.info("[%s] create-content mode=%s target=%s language=%s topic=%r tone=%s", rid, mode, target, language, topic, tone)
     uploaded_path = await _save_upload(upload, rid) if upload else None
+    uploaded_is_video = bool(uploaded_path and is_video_file(uploaded_path))
+    if uploaded_is_video and mode != "image":
+        raise HTTPException(status_code=400, detail="Video yalnızca 'Görsel yükle' modunda kullanılabilir.")
+    if uploaded_is_video and target != "story":
+        raise HTTPException(status_code=400, detail="Video yüklediğinizde yalnızca 'Sadece Story' üretilebilir. Video kırpılmadan story şablonuna yerleştirilir.")
 
     need_post, need_story, need_carousel = _required_variants(target)
 
@@ -221,17 +228,27 @@ async def create_content(
     full_caption = f"{caption}\n\n{' '.join(hashtags)}".strip()
 
     try:
-        post_source, story_source, masked_path = _make_sources(
-            mode=mode,
-            rid=rid,
-            topic=topic,
-            hook=hook,
-            image_path=uploaded_path,
-            mask_phi=mask_phi,
-            language=language,
-            need_post=need_post,
-            need_story=need_story,
-        )
+        masked_path = None
+        post_source = None
+        story_source = None
+        story_is_video = False
+
+        if uploaded_is_video:
+            story_source = uploaded_path
+            story_is_video = True
+        else:
+            post_source, story_source, masked_path = _make_sources(
+                mode=mode,
+                rid=rid,
+                topic=topic,
+                hook=hook,
+                image_path=uploaded_path,
+                mask_phi=mask_phi,
+                language=language,
+                need_post=need_post,
+                need_story=need_story,
+            )
+
         if need_carousel and not post_source:
             if mode == "image" and uploaded_path:
                 post_source = masked_path or uploaded_path
@@ -246,8 +263,12 @@ async def create_content(
             post_path = str(OUTPUT_DIR / f"post_{rid}.jpg")
             build_turkish_asset(post_source, post_path, topic, hook, "post", language=language)
         if need_story and story_source:
-            story_path = str(OUTPUT_DIR / f"story_{rid}.jpg")
-            build_turkish_asset(story_source, story_path, topic, hook, "story", language=language)
+            if story_is_video:
+                story_path = str(OUTPUT_DIR / f"story_{rid}.mp4")
+                build_story_video(story_source, story_path, topic, hook, language=language)
+            else:
+                story_path = str(OUTPUT_DIR / f"story_{rid}.jpg")
+                build_turkish_asset(story_source, story_path, topic, hook, "story", language=language)
         if need_carousel and post_source:
             for i, slide in enumerate(slides, start=1):
                 cpath = str(OUTPUT_DIR / f"carousel_{rid}_{i}.jpg")
@@ -279,6 +300,7 @@ async def create_content(
         "full_caption": full_caption,
         "slides": slides,
         "outputs": outputs,
+        "output_types": {"story": "video" if uploaded_is_video else "image"},
         "sources": {
             "uploaded": f"/uploads/{Path(uploaded_path).name}" if uploaded_path else None,
             "masked": f"/uploads/{Path(masked_path).name}" if masked_path else None,

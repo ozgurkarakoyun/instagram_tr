@@ -107,3 +107,33 @@ Dil seçimi şu alanlara uygulanır:
 - Alt banttaki uzmanlık/doktor etiketi
 
 Arapça metin için `arabic-reshaper` ve `python-bidi` bağımlılıkları eklenmiştir.
+
+
+## Video Story Özelliği
+
+Bu sürümde `Görsel yükle` modunda video dosyası da yüklenebilir.
+
+Desteklenen video formatları:
+
+- MP4
+- MOV
+- M4V
+- WebM
+- AVI
+- MKV
+
+Kullanım:
+
+1. `Görsel yükle` modunu seçin.
+2. Video dosyasını yükleyin.
+3. Dil ve konu alanını doldurun.
+4. `Sadece Story` butonuna basın.
+
+Kurallar:
+
+- Video yalnızca Story için kullanılır.
+- Video kırpılmaz.
+- Aspect ratio korunur.
+- Video, 1080x1920 story şablonu içindeki güvenli alana sığdırılır.
+- Yatay videolar küçük görünür ama kırpılmaz.
+- Dikey videolar çerçeve içine büyütülür/küçültülür ama crop uygulanmaz.
