@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 # Pillow 10+ removed Image.ANTIALIAS, but MoviePy 1.0.3 still references it
@@ -166,7 +167,7 @@ def build_story_video(
     pos = (x1 + (box_w - new_w) // 2, y1 + (box_h - new_h) // 2)
 
     bg_img = _render_story_background(topic, hook, language=language).convert("RGB")
-    bg_clip = ImageClip(bg_img).set_duration(duration)
+    bg_clip = ImageClip(np.array(bg_img)).set_duration(duration)
     video_layer = resized.set_position(pos)
     final = CompositeVideoClip([bg_clip, video_layer], size=(W, H)).set_duration(duration)
 

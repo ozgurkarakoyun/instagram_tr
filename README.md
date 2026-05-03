@@ -150,3 +150,15 @@ if not hasattr(Image, "ANTIALIAS"):
 ```
 
 Bu nedenle video Story üretiminde `module "PIL.Image" has no attribute "ANTIALIAS"` hatası alınmamalıdır.
+
+
+## Video Story MoviePy ImageClip Notu
+
+MoviePy 1.0.3 `ImageClip()` fonksiyonunda PIL Image nesnesi yerine NumPy array bekleyebilir.
+Bu sürümde Story arka planı şu şekilde dönüştürülür:
+
+```python
+bg_clip = ImageClip(np.array(bg_img)).set_duration(duration)
+```
+
+Bu, `"Image" object has no attribute "shape"` hatasını düzeltir.
