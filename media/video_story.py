@@ -16,6 +16,12 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter
 
+# Pillow 10+ removed Image.ANTIALIAS, but MoviePy 1.0.3 still references it
+# during clip.resize(). This compatibility shim prevents video Story rendering
+# from failing with: module 'PIL.Image' has no attribute 'ANTIALIAS'.
+if not hasattr(Image, "ANTIALIAS"):
+    Image.ANTIALIAS = Image.Resampling.LANCZOS
+
 from media.template_tr import (
     LANG_LABELS,
     WEBSITE,

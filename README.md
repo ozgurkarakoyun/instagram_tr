@@ -137,3 +137,16 @@ Kurallar:
 - Video, 1080x1920 story şablonu içindeki güvenli alana sığdırılır.
 - Yatay videolar küçük görünür ama kırpılmaz.
 - Dikey videolar çerçeve içine büyütülür/küçültülür ama crop uygulanmaz.
+
+
+## Video Story Pillow/MoviePy Uyumluluk Notu
+
+Pillow 10+ sürümlerinde `Image.ANTIALIAS` kaldırıldığı için MoviePy 1.0.3 video resize sırasında hata verebilir. 
+Bu sürümde `media/video_story.py` içine uyumluluk yaması eklenmiştir:
+
+```python
+if not hasattr(Image, "ANTIALIAS"):
+    Image.ANTIALIAS = Image.Resampling.LANCZOS
+```
+
+Bu nedenle video Story üretiminde `module "PIL.Image" has no attribute "ANTIALIAS"` hatası alınmamalıdır.

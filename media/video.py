@@ -18,6 +18,10 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+# Pillow 10+ compatibility for MoviePy 1.0.3
+if not hasattr(Image, "ANTIALIAS"):
+    Image.ANTIALIAS = Image.Resampling.LANCZOS
+
 logger = logging.getLogger(__name__)
 
 W, H           = 1080, 1920
