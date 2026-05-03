@@ -1,14 +1,9 @@
 """
 AI Instagram Agent TR Klinik İçerik Sistemi
-Özellikler:
-1. Konudan gönderi + story üretimi
-2. Yüklenen görseli GPT Image ile gönderi/story tasarımına dönüştürme
-3. Okunabilir başlık/hook bindirme
-4. Güncel konu önerileri
-5. Caption + hashtag üretimi
-6. Carousel üretimi
-7. Basit hasta bilgisi maskeleme
-8. İçerik arşivi
+Güncelleme:
+- Türkçe karakter destekli gömülü fontlar
+- Daha büyük ve okunabilir yazı alanları
+- Gönderi / Story / Carousel için ayrı üretim butonları
 """
 
 from __future__ import annotations
@@ -42,10 +37,18 @@ from archive_store import add_archive, get_archive, list_archive
 from media.privacy import mask_patient_info
 from media.template_tr import build_carousel_slide, build_turkish_asset
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s", datefmt="%Y-%m-%dT%H:%M:%S")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+)
 logger = logging.getLogger("instagram-agent-tr")
 
-app = FastAPI(title="Türkçe AI Instagram Agent", description="Ortopedi ve travmatoloji için klinik sosyal medya içerik üretim sistemi", version="4.0.0-tr-clinic")
+app = FastAPI(
+    title="Türkçe AI Instagram Agent",
+    description="Ortopedi ve travmatoloji için klinik sosyal medya içerik üretim sistemi",
+    version="4.1.0-tr-clinic",
+)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 for d in ("output", "static", "generated", "uploads", "archive"):
@@ -80,7 +83,7 @@ async def root():
 async def health():
     return {
         "status": "ok",
-        "version": "4.0.0-tr-clinic",
+        "version": "4.1.0-tr-clinic",
         "openai_text_model": os.environ.get("OPENAI_TEXT_MODEL", "gpt-4o-mini"),
         "openai_image_model": os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-2"),
         "timestamp": time.time(),
@@ -118,28 +121,60 @@ async def _save_upload(upload: UploadFile, rid: str) -> str:
     return str(out)
 
 
-def _make_sources(mode: str, rid: str, topic: str, hook: str, image_path: str | None, mask_phi: bool) -> tuple[str, str, str | None]:
+def _normalize_target(target: str) -> str:
+    target = (target or "post").strip().lower()
+    allowed = {"post", "story", "carousel", "all"}
+    if target not in allowed:
+        raise HTTPException(status_code=400, detail="target 'post', 'story', 'carousel' veya 'all' olmalıdır.")
+    return target
+
+
+def _required_variants(target: str) -> tuple[bool, bool, bool]:
+    return (
+        target in {"post", "all", "carousel"},
+        target in {"story", "all"},
+        target in {"carousel", "all"},
+    )
+
+
+def _make_sources(
+    mode: str,
+    rid: str,
+    topic: str,
+    hook: str,
+    image_path: str | None,
+    mask_phi: bool,
+    need_post: bool,
+    need_story: bool,
+) -> tuple[str | None, str | None, str | None]:
     masked_path = None
+    post_source = None
+    story_source = None
+
     if mode == "image":
         if not image_path:
             raise HTTPException(status_code=400, detail="Görsel modu için dosya yüklenmelidir.")
         masked_path = mask_patient_info(image_path, rid, enabled=mask_phi)
-        post_source = masked_path
-        story_source = masked_path
-        try:
-            post_source = edit_uploaded_image(masked_path, rid, topic, hook, "post")
-            logger.info("[%s] GPT image edit post successful", rid)
-        except Exception as exc:
-            logger.warning("[%s] GPT image edit post failed, using masked upload: %s", rid, exc)
-        try:
-            story_source = edit_uploaded_image(masked_path, rid, topic, hook, "story")
-            logger.info("[%s] GPT image edit story successful", rid)
-        except Exception as exc:
-            logger.warning("[%s] GPT image edit story failed, using masked upload: %s", rid, exc)
+        if need_post:
+            post_source = masked_path
+            try:
+                post_source = edit_uploaded_image(masked_path, rid, topic, hook, "post")
+                logger.info("[%s] GPT image edit post successful", rid)
+            except Exception as exc:
+                logger.warning("[%s] GPT image edit post failed, using masked upload: %s", rid, exc)
+        if need_story:
+            story_source = masked_path
+            try:
+                story_source = edit_uploaded_image(masked_path, rid, topic, hook, "story")
+                logger.info("[%s] GPT image edit story successful", rid)
+            except Exception as exc:
+                logger.warning("[%s] GPT image edit story failed, using masked upload: %s", rid, exc)
         return post_source, story_source, masked_path
 
-    post_source = generate_topic_image(topic=topic, hook=hook, rid=rid, variant="post")
-    story_source = generate_topic_image(topic=topic, hook=hook, rid=rid, variant="story")
+    if need_post:
+        post_source = generate_topic_image(topic=topic, hook=hook, rid=rid, variant="post")
+    if need_story:
+        story_source = generate_topic_image(topic=topic, hook=hook, rid=rid, variant="story")
     return post_source, story_source, masked_path
 
 
@@ -151,44 +186,77 @@ async def create_content(
     tone: str = Form(default="professional"),
     carousel_count: int = Form(default=5),
     mask_phi: bool = Form(default=True),
+    target: str = Form(default="post"),
     upload: UploadFile | None = File(default=None),
 ):
     rid = getattr(request.state, "request_id", uuid.uuid4().hex[:8])
     mode = (mode or "topic").strip().lower()
+    target = _normalize_target(target)
     topic = (topic or "").strip()
     if mode not in {"topic", "image"}:
         raise HTTPException(status_code=400, detail="mode 'topic' veya 'image' olmalıdır.")
     if not topic:
         raise HTTPException(status_code=400, detail="Konu boş olamaz.")
 
-    logger.info("[%s] create-content mode=%s topic=%r tone=%s", rid, mode, topic, tone)
+    logger.info("[%s] create-content mode=%s target=%s topic=%r tone=%s", rid, mode, target, topic, tone)
     uploaded_path = await _save_upload(upload, rid) if upload else None
+
+    need_post, need_story, need_carousel = _required_variants(target)
 
     hook = generate_turkish_hook(topic)
     caption = generate_turkish_caption(topic=topic, hook=hook, tone=tone)
     hashtags = generate_turkish_hashtags(topic)
-    slides = generate_carousel_slides(topic=topic, hook=hook, count=carousel_count)
+    slides = generate_carousel_slides(topic=topic, hook=hook, count=carousel_count) if need_carousel else []
     full_caption = f"{caption}\n\n{' '.join(hashtags)}".strip()
 
     try:
-        post_source, story_source, masked_path = _make_sources(mode, rid, topic, hook, uploaded_path, mask_phi)
-        post_path = f"output/post_{rid}.jpg"
-        story_path = f"output/story_{rid}.jpg"
-        build_turkish_asset(post_source, post_path, topic, hook, "post")
-        build_turkish_asset(story_source, story_path, topic, hook, "story")
+        post_source, story_source, masked_path = _make_sources(
+            mode=mode,
+            rid=rid,
+            topic=topic,
+            hook=hook,
+            image_path=uploaded_path,
+            mask_phi=mask_phi,
+            need_post=need_post,
+            need_story=need_story,
+        )
+        if need_carousel and not post_source:
+            if mode == "image" and uploaded_path:
+                post_source = masked_path or uploaded_path
+            else:
+                post_source = generate_topic_image(topic=topic, hook=hook, rid=rid, variant="post")
 
-        carousel_paths = []
-        for i, slide in enumerate(slides, start=1):
-            cpath = f"output/carousel_{rid}_{i}.jpg"
-            build_carousel_slide(post_source, cpath, slide, i, len(slides))
-            carousel_paths.append(cpath)
+        post_path = None
+        story_path = None
+        carousel_paths: list[str] = []
+
+        if need_post and post_source:
+            post_path = f"output/post_{rid}.jpg"
+            build_turkish_asset(post_source, post_path, topic, hook, "post")
+        if need_story and story_source:
+            story_path = f"output/story_{rid}.jpg"
+            build_turkish_asset(story_source, story_path, topic, hook, "story")
+        if need_carousel and post_source:
+            for i, slide in enumerate(slides, start=1):
+                cpath = f"output/carousel_{rid}_{i}.jpg"
+                build_carousel_slide(post_source, cpath, slide, i, len(slides))
+                carousel_paths.append(cpath)
     except Exception as exc:
         logger.exception("[%s] Media generation failed", rid)
         raise HTTPException(status_code=500, detail=f"Görsel üretimi başarısız: {exc}")
 
+    outputs = {}
+    if post_path:
+        outputs["post"] = f"/{post_path}"
+    if story_path:
+        outputs["story"] = f"/{story_path}"
+    if carousel_paths:
+        outputs["carousel"] = [f"/{p}" for p in carousel_paths]
+
     record = add_archive({
         "job_id": rid,
         "mode": mode,
+        "target": target,
         "topic": topic,
         "tone": tone,
         "hook": hook,
@@ -196,18 +264,22 @@ async def create_content(
         "hashtags": hashtags,
         "full_caption": full_caption,
         "slides": slides,
-        "outputs": {"post": f"/{post_path}", "story": f"/{story_path}", "carousel": [f"/{p}" for p in carousel_paths]},
-        "sources": {"uploaded": f"/{uploaded_path}" if uploaded_path else None, "masked": f"/{masked_path}" if masked_path else None, "post_source": f"/{post_source}", "story_source": f"/{story_source}"},
+        "outputs": outputs,
+        "sources": {
+            "uploaded": f"/{uploaded_path}" if uploaded_path else None,
+            "masked": f"/{masked_path}" if masked_path else None,
+            "post_source": f"/{post_source}" if post_source else None,
+            "story_source": f"/{story_source}" if story_source else None,
+        },
         "medical_disclaimer": DISCLAIMER,
     })
 
     return JSONResponse(content={**record, "preview_status": "ready", "publish_ready": False})
 
 
-# Eski endpoint uyumluluğu: /create-post aynı işi konu modu ile yapar.
 @app.post("/create-post")
 async def create_post_compat(request: Request, topic: str = Form(...), tone: str = Form(default="professional")):
-    return await create_content(request=request, mode="topic", topic=topic, tone=tone, carousel_count=5, mask_phi=True, upload=None)
+    return await create_content(request=request, mode="topic", topic=topic, tone=tone, carousel_count=5, mask_phi=True, target="post", upload=None)
 
 
 @app.get("/preview/{filename}")
