@@ -8,10 +8,12 @@ Güncelleme:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
 import uuid
+import zipfile
 from pathlib import Path
 
 import uvicorn
@@ -87,6 +89,12 @@ async def root():
     return HTMLResponse(content=ui_path.read_text(encoding="utf-8")) if ui_path.exists() else {"status": "running"}
 
 
+@app.get("/archive-gallery")
+async def archive_gallery():
+    ui_path = Path("static/archive.html")
+    return HTMLResponse(content=ui_path.read_text(encoding="utf-8")) if ui_path.exists() else {"status": "archive page missing"}
+
+
 @app.get("/health")
 async def health():
     return {
@@ -116,6 +124,36 @@ async def archive_detail(job_id: str):
     if not item:
         raise HTTPException(status_code=404, detail="Arşiv kaydı bulunamadı.")
     return JSONResponse(content=item)
+
+
+@app.get("/archive/{job_id}/download")
+async def archive_download(job_id: str):
+    item = get_archive(job_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Arşiv kaydı bulunamadı.")
+
+    bundle_path = OUTPUT_DIR / f"archive_{job_id}.zip"
+    outputs = item.get("outputs", {}) or {}
+
+    def add_output(zf: zipfile.ZipFile, label: str, url: str):
+        if not url:
+            return
+        name = Path(str(url)).name
+        local = OUTPUT_DIR / name
+        if local.exists():
+            zf.write(local, arcname=f"media/{label}_{name}")
+
+    with zipfile.ZipFile(bundle_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        add_output(zf, "post", outputs.get("post"))
+        add_output(zf, "story", outputs.get("story"))
+        for i, url in enumerate(outputs.get("carousel", []) or [], start=1):
+            add_output(zf, f"carousel_{i:02d}", url)
+
+        caption = item.get("full_caption") or item.get("caption") or ""
+        zf.writestr("caption.txt", caption)
+        zf.writestr("metadata.json", json.dumps(item, ensure_ascii=False, indent=2))
+
+    return FileResponse(str(bundle_path), media_type="application/zip", filename=f"archive_{job_id}.zip")
 
 
 async def _save_upload(upload: UploadFile, rid: str) -> str:

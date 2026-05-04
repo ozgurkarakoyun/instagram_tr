@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>İçerik Arşivi · AI Instagram Klinik İçerik Sistemi</title>
+<style>
+:root{--bg:#07131f;--panel:#0c1d2d;--line:#19384f;--text:#edf8ff;--muted:#a6c5d3;--teal:#22c8be;--mint:#8ce8d5;--danger:#ff8585;--shadow:0 20px 40px rgba(0,0,0,.35)}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#07131f,#0b1724 35%,#091421);color:var(--text);font-family:Inter,system-ui,Arial,sans-serif}
+header{display:flex;align-items:center;gap:14px;padding:16px 20px;border-bottom:1px solid rgba(140,232,213,.08);position:sticky;top:0;background:rgba(7,19,31,.93);backdrop-filter:blur(8px);z-index:10}
+.logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,var(--teal),var(--mint));color:#06202e;font-weight:900;display:grid;place-items:center}
+h1{font-size:20px;margin:0}.sub{color:var(--muted);font-size:12px}.toplinks{margin-left:auto;display:flex;gap:10px;align-items:center}
+a.btn,button.btn{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:#0f2538;color:var(--mint);font-weight:800;text-decoration:none;cursor:pointer}
+.main{max-width:1500px;margin:0 auto;padding:22px}.toolbar{display:grid;grid-template-columns:1fr 160px 160px 120px;gap:10px;margin-bottom:16px}
+input,select{width:100%;background:#07131f;color:var(--text);border:1px solid var(--line);border-radius:12px;padding:12px 14px;outline:none}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:16px}.card{background:linear-gradient(180deg,#0c1d2d,#091827);border:1px solid rgba(140,232,213,.12);border-radius:18px;box-shadow:var(--shadow);overflow:hidden}
+.media{background:#061522;min-height:260px;display:grid;place-items:center;border-bottom:1px solid rgba(140,232,213,.1)}.media img,.media video{width:100%;height:320px;object-fit:contain;background:#061522;display:block}
+.body{padding:14px}.meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.pill{font-size:11px;border:1px solid rgba(140,232,213,.18);background:rgba(32,199,186,.07);color:var(--mint);border-radius:999px;padding:5px 8px}
+.topic{font-size:17px;font-weight:900;line-height:1.25;margin:6px 0}.hook{font-size:13px;color:#d9f2f6;line-height:1.45}.caption{white-space:pre-wrap;max-height:180px;overflow:auto;margin-top:10px;background:#061522;border:1px solid rgba(140,232,213,.1);border-radius:12px;padding:11px;color:#e8f9fb;font-size:13px;line-height:1.5}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.actions a,.actions button{display:block;text-align:center;padding:9px;border-radius:10px;border:1px solid var(--line);background:#092137;color:var(--mint);text-decoration:none;font-weight:800;cursor:pointer}
+.outputs{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-top:10px}.outputs a{font-size:12px;text-align:center;padding:8px;border-radius:10px;border:1px solid rgba(140,232,213,.16);background:#061522;color:var(--text);text-decoration:none}
+.empty{padding:40px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:18px}.small{color:var(--muted);font-size:12px;margin-top:4px}
+@media(max-width:760px){.toolbar{grid-template-columns:1fr}.toplinks{display:none}.main{padding:14px}.grid{grid-template-columns:1fr}.media img,.media video{height:260px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">OK</div>
+  <div><h1>İçerik Arşivi</h1><div class="sub">Üretilen gönderi, story, carousel, caption ve hashtag kayıtları</div></div>
+  <div class="toplinks"><a class="btn" href="/">Yeni içerik üret</a><button class="btn" onclick="loadArchive()">Yenile</button></div>
+</header>
+<main class="main">
+  <div class="toolbar">
+    <input id="searchInput" placeholder="Konu, hook veya caption içinde ara..." oninput="render()">
+    <select id="typeFilter" onchange="render()"><option value="">Tüm tipler</option><option value="post">Gönderi</option><option value="story">Story</option><option value="carousel">Carousel</option></select>
+    <select id="langFilter" onchange="render()"><option value="">Tüm diller</option><option value="tr">Türkçe</option><option value="en">English</option><option value="ar">العربية</option></select>
+    <button class="btn" onclick="loadArchive()">Yenile</button>
+  </div>
+  <div id="count" class="small"></div>
+  <div id="grid" class="grid"></div>
+</main>
+<script>
+let items=[];
+function esc(s){return String(s||'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+function isVideo(url){return String(url||'').toLowerCase().match(/\.(mp4|mov|m4v|webm)$/)}
+function allOutputs(item){
+  const out=item.outputs||{}; let arr=[];
+  if(out.post) arr.push(['Gönderi',out.post]);
+  if(out.story) arr.push(['Story',out.story]);
+  (out.carousel||[]).forEach((u,i)=>arr.push([`Carousel ${i+1}`,u]));
+  return arr;
+}
+function preferredPreview(item){
+  const out=item.outputs||{};
+  if(out.post) return out.post;
+  if(out.story) return out.story;
+  if(out.carousel && out.carousel.length) return out.carousel[0];
+  return '';
+}
+async function loadArchive(){
+  const grid=document.getElementById('grid');
+  grid.innerHTML='<div class="empty">Arşiv yükleniyor...</div>';
+  try{
+    const res=await fetch('/archive?limit=500');
+    const data=await res.json();
+    items=data.items||[];
+    render();
+  }catch(e){
+    grid.innerHTML='<div class="empty">Arşiv yüklenemedi: '+esc(e.message)+'</div>';
+  }
+}
+function render(){
+  const q=document.getElementById('searchInput').value.toLowerCase().trim();
+  const type=document.getElementById('typeFilter').value;
+  const lang=document.getElementById('langFilter').value;
+  const filtered=items.filter(x=>{
+    const hay=[x.topic,x.hook,x.caption,(x.hashtags||[]).join(' ')].join(' ').toLowerCase();
+    const out=x.outputs||{};
+    const hasType=!type || (type==='post'&&out.post) || (type==='story'&&out.story) || (type==='carousel'&&out.carousel&&out.carousel.length);
+    const hasLang=!lang || x.language===lang;
+    return (!q || hay.includes(q)) && hasType && hasLang;
+  });
+  document.getElementById('count').textContent=`${filtered.length} kayıt gösteriliyor.`;
+  const grid=document.getElementById('grid');
+  if(!filtered.length){grid.innerHTML='<div class="empty">Kayıt bulunamadı.</div>';return}
+  grid.innerHTML=filtered.map(item=>{
+    const prev=preferredPreview(item);
+    const media=prev ? (isVideo(prev)?`<video src="${prev}" controls playsinline></video>`:`<img src="${prev}" alt="">`) : '<div class="empty">Önizleme yok</div>';
+    const outputs=allOutputs(item).map(([label,url])=>`<a href="${url}" download>${esc(label)}</a>`).join('');
+    const zipUrl=`/archive/${encodeURIComponent(item.job_id||'')}/download`;
+    const caption=(item.full_caption||item.caption||'');
+    return `<article class="card">
+      <div class="media">${media}</div>
+      <div class="body">
+        <div class="meta">
+          <span class="pill">${esc(item.created_at||'')}</span>
+          <span class="pill">${esc(item.target||item.mode||'')}</span>
+          <span class="pill">${esc(item.language_name||item.language||'')}</span>
+        </div>
+        <div class="topic">${esc(item.topic||'')}</div>
+        <div class="hook">${esc(item.hook||'')}</div>
+        <div class="outputs">${outputs}</div>
+        <div class="caption" id="cap_${esc(item.job_id)}">${esc(caption)}</div>
+        <div class="actions">
+          <button onclick="copyText(${JSON.stringify(caption)})">Caption kopyala</button>
+          <a href="${zipUrl}" download>Hepsini indir</a>
+        </div>
+      </div>
+    </article>`
+  }).join('');
+}
+function copyText(txt){navigator.clipboard.writeText(txt||'')}
+loadArchive();
+</script>
+</body>
+</html>
